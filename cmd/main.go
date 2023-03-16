@@ -18,12 +18,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"log"
-	"net/http"
-	"os"
-
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 
 	"github.com/openshift/compliance-audit-router/pkg/config"
 	"github.com/openshift/compliance-audit-router/pkg/listeners"
@@ -32,16 +28,10 @@ import (
 var portString = ":" + fmt.Sprint(config.AppConfig.ListenPort)
 
 func main() {
-	r := mux.NewRouter()
-	r.Use(loggingMiddleware)
+	r := gin.Default()
 
 	listeners.InitRoutes(r)
 
 	log.Printf("Listening on %s", portString)
-	log.Fatal(http.ListenAndServe(portString, r))
-}
-
-// Mux middleware to log requests in the Apache combined logging format
-func loggingMiddleware(next http.Handler) http.Handler {
-	return handlers.CombinedLoggingHandler(os.Stdout, next)
+	log.Fatal(r.Run())
 }

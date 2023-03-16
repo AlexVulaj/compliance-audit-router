@@ -19,22 +19,19 @@ package listeners
 import (
 	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/gorilla/mux"
-	"github.com/openshift/compliance-audit-router/pkg/config"
 	"github.com/openshift/compliance-audit-router/pkg/helpers"
-	"github.com/openshift/compliance-audit-router/pkg/jira"
-	"github.com/openshift/compliance-audit-router/pkg/ldap"
 	"github.com/openshift/compliance-audit-router/pkg/splunk"
 )
 
 type Listener struct {
 	Path        string
 	Methods     []string
-	HandlerFunc http.HandlerFunc
+	HandlerFunc gin.HandlerFunc
 }
 
 var Listeners = []Listener{
@@ -55,79 +52,34 @@ var Listeners = []Listener{
 	},
 }
 
-// InitRoutes initializes routes from the defined Listeners
-func InitRoutes(router *mux.Router) {
+func InitRoutes(router *gin.Engine) {
 	for _, listener := range Listeners {
-		if config.AppConfig.Verbose {
-			log.Println("enabling endpoint", listener.Path, listener.Methods)
+		for _, method := range listener.Methods {
+			router.Handle(method, listener.Path, listener.HandlerFunc)
 		}
-		router.NewRoute().
-			HandlerFunc(listener.HandlerFunc).
-			Name(listener.Path).
-			Path(listener.Path).
-			Methods(listener.Methods...)
 	}
 }
 
 // RespondOKHandler replies with a 200 OK and "OK" text to any request, for health checks
-func RespondOKHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("OK"))
+func RespondOKHandler(context *gin.Context) {
+	context.Data(http.StatusOK, "text/plain", []byte("OK"))
 }
 
-// ProcessAlertHandler is the main logic processing alerts received from Splunk
-func ProcessAlertHandler(w http.ResponseWriter, r *http.Request) {
-	// Retrieve the alert search results
+func ProcessAlertHandler(context *gin.Context) {
 	var alert splunk.Webhook
 
-	err := helpers.DecodeJSONRequestBody(w, r, &alert)
-	if err != nil {
+	if err := context.BindJSON(&alert); err != nil {
 		var mr *helpers.MalformedRequest
 		if errors.As(err, &mr) {
-			http.Error(w, mr.Msg, mr.Status)
+			context.JSON(mr.Status, mr.Msg)
 		} else {
 			log.Println(err.Error())
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			context.Status(http.StatusInternalServerError)
 		}
-		return
 	}
 
 	log.Println("Received alert from Splunk:", alert.Sid, alert.Result.Raw)
-
-	// searchResults, err := splunk.RetrieveSearchFromAlert(alert.Sid)
-	// if err != nil {
-	// 	log.Println(err)
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	w.Header().Set("Content-Type", "text/plain")
-	// 	w.Write([]byte("failed alert lookup"))
-	// 	return
-	// }
-
 	fmt.Printf("%+v\n", alert)
 
 	os.Exit(1)
-	//user, manager, err := ldap.LookupUser(searchResults.UserName)
-	user, manager, err := ldap.LookupUser("TODO USERNAME GOES HERE")
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("failed ldap lookup"))
-		return
-	}
-
-	err = jira.CreateTicket(user, manager, alert.Result)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("failed ticket creation"))
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte("ok"))
-	return
 }
