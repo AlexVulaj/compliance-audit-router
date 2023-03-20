@@ -18,30 +18,18 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"net/http"
-	"os"
-
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-
 	"github.com/openshift/compliance-audit-router/pkg/config"
 	"github.com/openshift/compliance-audit-router/pkg/listeners"
+	"log"
+	"net/http"
 )
 
 var portString = ":" + fmt.Sprint(config.AppConfig.ListenPort)
 
 func main() {
-	r := mux.NewRouter()
-	r.Use(loggingMiddleware)
-
-	listeners.InitRoutes(r)
+	// Middleware intentionally left out
+	listeners.InitRoutes()
 
 	log.Printf("Listening on %s", portString)
-	log.Fatal(http.ListenAndServe(portString, r))
-}
-
-// Mux middleware to log requests in the Apache combined logging format
-func loggingMiddleware(next http.Handler) http.Handler {
-	return handlers.CombinedLoggingHandler(os.Stdout, next)
+	log.Fatal(http.ListenAndServe(portString, http.DefaultServeMux))
 }

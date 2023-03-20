@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gorilla/mux"
 	"github.com/openshift/compliance-audit-router/pkg/config"
 	"github.com/openshift/compliance-audit-router/pkg/helpers"
 	"github.com/openshift/compliance-audit-router/pkg/jira"
@@ -56,21 +55,21 @@ var Listeners = []Listener{
 }
 
 // InitRoutes initializes routes from the defined Listeners
-func InitRoutes(router *mux.Router) {
+func InitRoutes() {
 	for _, listener := range Listeners {
 		if config.AppConfig.Verbose {
 			log.Println("enabling endpoint", listener.Path, listener.Methods)
 		}
-		router.NewRoute().
-			HandlerFunc(listener.HandlerFunc).
-			Name(listener.Path).
-			Path(listener.Path).
-			Methods(listener.Methods...)
+		http.HandleFunc(listener.Path, listener.HandlerFunc)
 	}
 }
 
 // RespondOKHandler replies with a 200 OK and "OK" text to any request, for health checks
 func RespondOKHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "", http.StatusMethodNotAllowed)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte("OK"))
